@@ -1,0 +1,2 @@
+GenerateMeshCollider 快速上物件MESH Collider
+SimplifyMeshForCollider 快速上物件MESH Collider (優化減少三角面)
