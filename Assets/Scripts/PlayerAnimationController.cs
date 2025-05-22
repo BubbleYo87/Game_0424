@@ -48,6 +48,7 @@ public class PlayerAnimationController : MonoBehaviour
     void Update()
     {
         if (animator == null || rb == null) return;
+    
 
         // ✅ Q 鍵切換武器模式
         if (Input.GetKeyDown(KeyCode.Q))
@@ -95,6 +96,10 @@ public class PlayerAnimationController : MonoBehaviour
         {
             animator.SetBool("air", false);
         }
+
+        // ✅ WallRunning 動畫狀態同步
+        animator.SetBool("wallrunning", playerMovement.wallrunning);
+
 
         // ✅ 更新移動速度給 Blend Tree
         Vector3 horizontalVelocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);

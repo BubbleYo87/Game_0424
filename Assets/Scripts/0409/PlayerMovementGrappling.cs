@@ -10,8 +10,12 @@ public class PlayerMovementGrappling : MonoBehaviour
     public float walkSpeed;
     public float sprintSpeed;
     public float swingSpeed;
-
+    public float dashSpeed;
+    public float dashSpeedChangeFactor;
+    public float climbingSpeed;
     public float groundDrag;
+    public float wallrunSpeed;
+    public float maxYSpeed;
 
     [Header("Jumping")]
     public float jumpForce;
@@ -64,13 +68,19 @@ public class PlayerMovementGrappling : MonoBehaviour
         walking,
         sprinting,
         crouching,
-        air
+        air,
+        wallrunning,
+        climbing,
+        dashing
     }
 
     public bool freeze;
 
     public bool activeGrapple;
     public bool swinging;
+    public bool wallrunning;
+    public bool climbing;
+    public bool dashing;
 
     public bool GrappleAttempted { get; private set; }
     public bool GrappleHit { get; private set; }
@@ -94,8 +104,13 @@ public class PlayerMovementGrappling : MonoBehaviour
         SpeedControl();
         StateHandler();
 
-        // handle drag
+        /* // handle drag 舊的備用
         if (grounded && !activeGrapple)
+            rb.drag = groundDrag;
+        else
+            rb.drag = 0; */
+
+        if (state == MovementState.walking ||state == MovementState.sprinting || state == MovementState.crouching)
             rb.drag = groundDrag;
         else
             rb.drag = 0;
@@ -147,6 +162,11 @@ public class PlayerMovementGrappling : MonoBehaviour
         }
     }
 
+    private float desiredMoveSpeed;
+    private float lastDesiredMoveSpeed;
+    private MovementState lastState;
+    private bool keepMomentum;
+
     private void StateHandler()
     {
         // Mode - Freeze
@@ -161,43 +181,115 @@ public class PlayerMovementGrappling : MonoBehaviour
         else if (activeGrapple)
         {
             state = MovementState.grappling;
-            moveSpeed = sprintSpeed;
+            desiredMoveSpeed = sprintSpeed;
         }
 
         // Mode - Swinging
         else if (swinging)
         {
             state = MovementState.swinging;
-            moveSpeed = swingSpeed;
+            desiredMoveSpeed = swingSpeed;
         }
 
         // Mode - Crouching
         else if (Input.GetKey(crouchKey))
         {
             state = MovementState.crouching;
-            moveSpeed = crouchSpeed;
+            desiredMoveSpeed = crouchSpeed;
         }
 
         // Mode - Sprinting
         else if (grounded && Input.GetKey(sprintKey))
         {
             state = MovementState.sprinting;
-            moveSpeed = sprintSpeed;
+            desiredMoveSpeed = sprintSpeed;
         }
 
         // Mode - Walking
         else if (grounded)
         {
             state = MovementState.walking;
-            moveSpeed = walkSpeed;
+            desiredMoveSpeed = walkSpeed;
+        }
+
+        // Mode - Wallrunning
+        else if (wallrunning)
+        {
+            state = MovementState.wallrunning;
+            moveSpeed = sprintSpeed;
+        }
+
+        // Mode - Climbing
+        else if (climbing)
+        {
+            state = MovementState.climbing;
+            desiredMoveSpeed = climbingSpeed;
+        }
+    
+        // Mode - Dashing
+        else if (dashing)
+        {
+            state = MovementState.swinging;
+            desiredMoveSpeed = dashSpeed;
+            speedChangeFactor = dashSpeedChangeFactor;
         }
 
         // Mode - Air
         else
         {
             state = MovementState.air;
+
+            if(desiredMoveSpeed < sprintSpeed)
+               desiredMoveSpeed = walkSpeed;
+            else
+                desiredMoveSpeed = sprintSpeed;
         }
+
+        bool DesiredMoveSpeedHasChange = desiredMoveSpeed != lastDesiredMoveSpeed;
+        if(lastState == MovementState.dashing) keepMomentum = true;
+
+        if(DesiredMoveSpeedHasChange)
+        {
+            if(keepMomentum)
+            {
+                StopAllCoroutines();
+                StartCoroutine(SmoothlyLerpMoveSpeed());
+            }
+            else
+            {
+                StopAllCoroutines();
+                moveSpeed = desiredMoveSpeed;
+            }
+        }
+
+        lastDesiredMoveSpeed = desiredMoveSpeed;
+        lastState = state;
     }
+
+    private float speedChangeFactor;
+    private IEnumerator SmoothlyLerpMoveSpeed()
+    {
+        // smoothly lerp movementSpeed to desired value
+        float time = 0;
+        float difference = Mathf.Abs(desiredMoveSpeed - moveSpeed);
+        float startValue = moveSpeed;
+
+        float boostFactor = speedChangeFactor;
+
+        while (time < difference)
+        {
+            moveSpeed = Mathf.Lerp(startValue, desiredMoveSpeed, time / difference);
+
+            time += Time.deltaTime * boostFactor;
+
+            yield return null;
+        }
+
+        moveSpeed = desiredMoveSpeed;
+        speedChangeFactor = 1f;
+        keepMomentum = false;
+    }
+
 
     private void MovePlayer()
     {
@@ -251,6 +343,32 @@ public class PlayerMovementGrappling : MonoBehaviour
                 rb.velocity = new Vector3(limitedVel.x, rb.velocity.y, limitedVel.z);
             }
         }
+
+        // limit y velocity
+        if (maxYSpeed != 0 && rb.velocity.y > maxYSpeed)
+        {
+            rb.velocity = new Vector3(rb.velocity.x, maxYSpeed, rb.velocity.z);
+        }
+        
+    }
+    public void WallRunJump(float upwardForce, float outwardForce, Vector3 wallNormal)
+    {
+        // 防止在斜坡上誤觸
+        exitingSlope = true;
+        readyToJump = false;
+
+        // 1. 重設 Y 速度（垂直分量歸零，不影響水平速度）
+        rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
+
+        // 2. 計算跳躍方向：往上 + 推離牆面
+        Vector3 jumpDirection = transform.up * upwardForce 
+                            + wallNormal * outwardForce;
+
+        // 3. 施加衝量
+        rb.AddForce(jumpDirection, ForceMode.Impulse);
+
+        // 4. 跳躍冷卻；跳完過一段時間才能再次跳
+        Invoke(nameof(ResetJump), jumpCooldown);
     }
 
     private void Jump()
@@ -372,7 +490,7 @@ public class PlayerMovementGrappling : MonoBehaviour
 
         return velocityXZ + velocityY;
     }
-
+    
     #region Text & Debugging
 
     public TextMeshProUGUI text_speed;

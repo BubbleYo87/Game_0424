@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
-// using DG.Tweening; // 裡面有補間動畫功能（你暫時註解掉了）
+using DG.Tweening; // 裡面有補間動畫功能（你暫時註解掉了）
 
 public class PlayerCam : MonoBehaviour
 {
@@ -105,4 +105,8 @@ public class PlayerCam : MonoBehaviour
         transform.DOLocalRotate(new Vector3(0, 0, zTilt), 0.25f);
     }
     */
+    public void DoFov(float endValue)
+    {
+        GetComponent<Camera>().DOFieldOfView(endValue, 0.25f);
+    }
 }
