@@ -8,6 +8,9 @@ TagManager:
   - Ground
   - Unta
   - ceiling
+  - P_Bullet
+  - E_Bullet
+  - Enemy
   layers:
   - Default
   - TransparentFX

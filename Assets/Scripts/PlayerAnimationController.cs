@@ -11,12 +11,14 @@ public class PlayerAnimationController : MonoBehaviour
     private Rigidbody rb;
     private bool wasGrapplingActive = false;
     private bool hasGrappled = false;
+    public bool isAttack = false;
+    public Collider swordCollider;
 
     // 🔫 武器模式：0 = 刀、1 = 槍
     private int weaponMode = 0;
 
     // 🔢 子彈相關
-    [SerializeField] private int maxAmmo = 10;       // 最大子彈數
+    [SerializeField] private int maxAmmo = 15;       // 最大子彈數
     [SerializeField] private int currentAmmo;        // 當前子彈數
     public TextMeshProUGUI ammoText;                 // UI 文字顯示用
     private bool isReloading = false;                // 是否正在換彈
@@ -43,12 +45,15 @@ public class PlayerAnimationController : MonoBehaviour
         // 初始化
         animator.SetInteger("weaponMode", weaponMode);
         currentAmmo = maxAmmo; // 子彈初始化滿彈
+        swordCollider.enabled = false;  // 确保初始时关闭
     }
 
     void Update()
     {
         if (animator == null || rb == null) return;
-    
+
+        Atk_Monitor();
+        Debug.Log(isAttack);
 
         // ✅ Q 鍵切換武器模式
         if (Input.GetKeyDown(KeyCode.Q))
@@ -169,6 +174,44 @@ public class PlayerAnimationController : MonoBehaviour
         }
 
         isShooting = false;
+    }
+
+    private void Atk_Monitor()
+    {
+        var stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+        if (stateInfo.IsName("Base Layer.Atk1"))  // 改成你真正的 LayerName.StateName
+        {
+            // 取得當前剪輯
+            var clipInfo = animator.GetCurrentAnimatorClipInfo(0);
+            if (clipInfo.Length > 0)
+            {
+                var clip = clipInfo[0].clip;
+                float clipLen = clip.length;
+
+                // 計算實際播放時間（取 normalizedTime 的小數部分）
+                float playTime = (stateInfo.normalizedTime % 1f) * clipLen;
+
+                // 如果在 0.3 到 0.7 秒之間，就認定 isAttack = true
+                isAttack = playTime >= 0.3f && playTime <= 0.7f;
+            }
+        }
+        else
+        {
+            // 不在 Atk1 動畫時，一律重置
+            isAttack = false;
+        }
+    }
+
+    // 2. 以下两个函数通过“动画事件（Animation Event）”调用
+    //    在攻击动画挥剑打到瞬间，调用 EnableSword()，在挥剑结束前关闭
+    public void EnableSword()
+    {
+        swordCollider.enabled = true;
+    }
+
+    public void DisableSword()
+    {
+        swordCollider.enabled = false;
     }
 
 }

@@ -4,7 +4,7 @@ public class GunShooter : MonoBehaviour
 {
     public GameObject bulletPrefab;     // 子彈預製體
     public Transform firePoint;         // 槍口位置
-    public float bulletSpeed = 30f;
+    public float bulletSpeed = 80f;
 
     public Camera cam;                  // 📷 攝影機（請拖進來）
 
@@ -16,6 +16,7 @@ public class GunShooter : MonoBehaviour
             return;
         }
 
+        print("shoot");
         // 1️⃣ 從畫面中央射出一條射線（crosshair 射線）
         Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)); // 螢幕中央
         Vector3 targetDirection;
