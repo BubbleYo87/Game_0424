@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro; // 引用 TextMeshPro 命名空間
 using System.Collections;
+using System.Threading;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerAnimationController : MonoBehaviour
@@ -16,6 +17,9 @@ public class PlayerAnimationController : MonoBehaviour
 
     // 🔫 武器模式：0 = 刀、1 = 槍
     private int weaponMode = 0;
+    private int comboStep;
+    public float interval = 2f;
+    private float timer;
 
     // 🔢 子彈相關
     [SerializeField] private int maxAmmo = 15;       // 最大子彈數
@@ -64,12 +68,18 @@ public class PlayerAnimationController : MonoBehaviour
         }
 
         // ✅ 左鍵攻擊邏輯
-        if (Input.GetMouseButtonDown(0) && playerMovement.grounded)
+        if (Input.GetMouseButtonDown(0) && playerMovement.grounded && !isAttack)
         {
             if (weaponMode == 0)
             {
+                isAttack = true;
                 // 🗡️ 持刀攻擊：不扣子彈，不限間隔
+                comboStep++;
+                if (comboStep > 3)
+                    comboStep = 1;
+                timer = interval;
                 animator.SetTrigger("atk");
+                animator.SetInteger("Knife_Combo", comboStep);
             }
             else if (weaponMode == 1 && !isReloading && !isShooting)
             {
@@ -85,6 +95,17 @@ public class PlayerAnimationController : MonoBehaviour
                 }
             }
         }
+
+        if (timer != 0)
+        {
+            timer -= Time.deltaTime; ;
+            if (timer <= 0)
+            {
+                timer = 0;
+                comboStep = 0;
+            }
+        }
+
 
         // ✅ R 鍵手動補彈（只有在未滿彈、未在重裝時）
         if (Input.GetKeyDown(KeyCode.R) && weaponMode == 1 && !isReloading && currentAmmo < maxAmmo)
@@ -171,6 +192,9 @@ public class PlayerAnimationController : MonoBehaviour
             GunShooter shooter = GetComponent<GunShooter>();
             if (shooter != null)
                 shooter.Shoot();
+
+            // 4. 開槍瞬間，也貼「我要震動」的公告
+            GameEvents.TriggerCameraShake();
         }
 
         isShooting = false;
@@ -198,7 +222,7 @@ public class PlayerAnimationController : MonoBehaviour
         else
         {
             // 不在 Atk1 動畫時，一律重置
-            isAttack = false;
+            /* isAttack = false; */
         }
     }
 
@@ -207,11 +231,13 @@ public class PlayerAnimationController : MonoBehaviour
     public void EnableSword()
     {
         swordCollider.enabled = true;
+        // 3. 攻擊動畫揮劍瞬間，貼上「我要震動」的公告
+        GameEvents.TriggerCameraShake();
     }
 
     public void DisableSword()
     {
         swordCollider.enabled = false;
+        isAttack = false;
     }
-
 }
