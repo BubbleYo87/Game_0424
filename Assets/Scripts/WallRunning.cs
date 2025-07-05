@@ -1,6 +1,9 @@
+// WallRunning.cs
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public class WallRunning : MonoBehaviour
 {
@@ -13,8 +16,8 @@ public class WallRunning : MonoBehaviour
     private float wallRunTimer;
 
     [Header("Wall Jump Settings")]
-    public float wallJumpUpForce = 6f;    // 牆跑跳的垂直力：比 pm.jumpForce 要小
-    public float wallJumpSideForce = 8f;  // 牆跑跳的水平力
+    public float wallJumpUpForce = 6f;
+    public float wallJumpSideForce = 8f;
 
     [Header("Input")]
     public KeyCode upwardsRunKey = KeyCode.LeftShift;
@@ -28,7 +31,6 @@ public class WallRunning : MonoBehaviour
     public Transform cam;
     public float cameraTilt = 15f;
     public float tiltSpeed = 5f;
-
     private float currentTilt;
 
     [Header("Camera FOV")]
@@ -36,6 +38,13 @@ public class WallRunning : MonoBehaviour
     public float wallRunFOV = 90f;
     public float defaultFOV = 60f;
     public float fovTransitionSpeed = 8f;
+
+    [Header("URP Motion Blur")]
+    [Tooltip("Global Volume with Motion Blur Override")] public Volume postProcessVolume;
+    [Tooltip("Target Motion Blur intensity (0-1)")] public float blurTarget = 1f;
+    [Tooltip("Blur transition speed")] public float blurSpeed = 8f;
+    private MotionBlur motionBlur;
+    private float originalBlur;
 
     [Header("Detection")]
     public float wallCheckDistance;
@@ -54,6 +63,12 @@ public class WallRunning : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         pm = GetComponent<PlayerMovementGrappling>();
+        // initialize URP Motion Blur
+        if (postProcessVolume != null && postProcessVolume.profile.TryGet<MotionBlur>(out motionBlur))
+        {
+            originalBlur = motionBlur.intensity.value;
+            motionBlur.active = false;
+        }
     }
 
     private void Update()
@@ -61,7 +76,7 @@ public class WallRunning : MonoBehaviour
         CheckForWall();
         StateMachine();
         TiltCamera();
-        HandleFOV();
+        HandleFOVAndBlur();
         if (pm.wallrunning && Input.GetKeyDown(pm.jumpKey))
             WallJump();
     }
@@ -85,31 +100,25 @@ public class WallRunning : MonoBehaviour
 
     private void StateMachine()
     {
-        // Getting Inputs
         horizontalInput = Input.GetAxisRaw("Horizontal");
         verticalInput = Input.GetAxisRaw("Vertical");
-
         upwardsRunning = Input.GetKey(upwardsRunKey);
         downwardsRunning = Input.GetKey(downwardsRunKey);
 
-        // State 1 - Wallrunning
-        if((wallLeft || wallRight) && verticalInput > 0 && AboveGround())
+        if ((wallLeft || wallRight) && verticalInput > 0 && AboveGround())
         {
-            if (!pm.wallrunning)
-                StartWallRun();
+            if (!pm.wallrunning) StartWallRun();
         }
-
-        // State 3 - None
         else
         {
-            if (pm.wallrunning)
-                StopWallRun();
+            if (pm.wallrunning) StopWallRun();
         }
     }
 
     private void StartWallRun()
     {
         pm.wallrunning = true;
+        wallRunTimer = maxWallRunTime;
     }
 
     private void WallRunningMovement()
@@ -118,60 +127,53 @@ public class WallRunning : MonoBehaviour
         rb.velocity = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
 
         Vector3 wallNormal = wallRight ? rightWallhit.normal : leftWallhit.normal;
-
         Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
-
         if ((orientation.forward - wallForward).magnitude > (orientation.forward - -wallForward).magnitude)
             wallForward = -wallForward;
 
-        // forward force
         rb.AddForce(wallForward * wallRunForce, ForceMode.Force);
-
-        // upwards/downwards force
-        if (upwardsRunning)
-            rb.velocity = new Vector3(rb.velocity.x, wallClimbSpeed, rb.velocity.z);
-        if (downwardsRunning)
-            rb.velocity = new Vector3(rb.velocity.x, -wallClimbSpeed, rb.velocity.z);
-
-        // push to wall force
+        if (upwardsRunning) rb.velocity = new Vector3(rb.velocity.x, wallClimbSpeed, rb.velocity.z);
+        if (downwardsRunning) rb.velocity = new Vector3(rb.velocity.x, -wallClimbSpeed, rb.velocity.z);
         if (!(wallLeft && horizontalInput > 0) && !(wallRight && horizontalInput < 0))
             rb.AddForce(-wallNormal * 100, ForceMode.Force);
+
+        wallRunTimer -= Time.deltaTime;
+        if (wallRunTimer <= 0) StopWallRun();
     }
 
     private void StopWallRun()
     {
         pm.wallrunning = false;
+        rb.useGravity = true;
     }
+
     private void TiltCamera()
     {
+        currentTilt = 0f;
         if (pm.wallrunning)
-        {
-            if (wallLeft)
-                currentTilt = -cameraTilt;
-            else if (wallRight)
-                currentTilt = cameraTilt;
-        }
-        else
-        {
-            currentTilt = 0;
-        }
+            currentTilt = wallLeft ? -cameraTilt : cameraTilt;
+        Quaternion targetRot = Quaternion.Euler(0, 0, currentTilt);
+        cam.localRotation = Quaternion.Lerp(cam.localRotation, targetRot, Time.deltaTime * tiltSpeed);
+    }
 
-        Quaternion targetRotation = Quaternion.Euler(0, 0, currentTilt);
-        cam.localRotation = Quaternion.Lerp(cam.localRotation, targetRotation, Time.deltaTime * tiltSpeed);
-    }
-    private void HandleFOV()
+    private void HandleFOVAndBlur()
     {
-        float targetFOV = pm.wallrunning ? wallRunFOV : defaultFOV;
+        bool running = pm.wallrunning;
+        float targetFOV = running ? wallRunFOV : defaultFOV;
         camComponent.fieldOfView = Mathf.Lerp(camComponent.fieldOfView, targetFOV, Time.deltaTime * fovTransitionSpeed);
+
+        if (motionBlur != null)
+        {
+            motionBlur.active = running;
+            float target = running ? blurTarget : originalBlur;
+            motionBlur.intensity.value = Mathf.Lerp(motionBlur.intensity.value, target, Time.deltaTime * blurSpeed);
+        }
     }
+
     private void WallJump()
     {
         StopWallRun();
         Vector3 wallNormal = wallRight ? rightWallhit.normal : leftWallhit.normal;
-
-        // 傳入 wallJumpUpForce，而非 pm.jumpForce
         pm.WallRunJump(wallJumpUpForce, wallJumpSideForce, wallNormal);
     }
-
-
 }

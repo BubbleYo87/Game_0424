@@ -1,47 +1,75 @@
 // DoubleTapDash.cs
 using UnityEngine;
+using UnityEngine.Rendering;                    // URP Post-processing
+using UnityEngine.Rendering.Universal;
 using System.Collections;
 
 [RequireComponent(typeof(Rigidbody))]
 public class DoubleTapDash : MonoBehaviour
 {
-    [Header("攝影機參考")]
-    [Tooltip("用來判斷移動方向的攝影機")]
-    public Camera playerCamera;
+    [Header("攝影機與 URP 後處理")]
+    [Tooltip("用來判定方向並修改 FOV 的攝影機")] public Camera playerCamera;
+    [Tooltip("掛載了 Motion Blur Override 的 Global Volume")] public Volume postProcessVolume;
 
     [Header("連擊判定")]
-    [Tooltip("兩次按鍵間隔的最大時間（秒）")]
-    public float doubleTapTime = 0.3f;
-    private KeyCode lastTapKey = KeyCode.None;
-    private float lastTapTimeStamp;
+    [Tooltip("兩次按鍵間隔的最大時間（秒）")] public float doubleTapTime = 0.3f;
 
     [Header("Dash 設定")]
-    [Tooltip("Dash 持續時間（秒）")]
-    public float dashDuration = 0.1f;
-    [Tooltip("最大 Dash 距離（世界單位）")]
-    public float dashDistance = 2f;
-    [Tooltip("Dash 時是否暫時關閉碰撞")]
-    public bool disableCollisions = true;
-    [Tooltip("當檢測到碰撞時，從障礙前退多遠（避免貼到牆上）")]
-    public float collisionOffset = 0.1f;
+    [Tooltip("Dash 持續時間（秒）")] public float dashDuration = 0.1f;
+    [Tooltip("最大 Dash 距離（世界單位）")] public float dashDistance = 2f;
+    [Tooltip("障礙檢測預留距離")] public float collisionOffset = 0.1f;
+    [Tooltip("Dash 時暫時關閉碰撞")] public bool disableCollisions = true;
+    [Tooltip("Dash 冷卻時間（秒）")] public float dashCooldown = 1f;
 
     [Header("高度偏移")]
-    [Tooltip("Dash 最終位置在 Y 軸上抬高，避免穿地面")]
-    public float heightOffset = 0.5f;
+    [Tooltip("Dash 結束時抬高的 Y 偏移")] public float heightOffset = 0.5f;
 
+    [Header("速度視覺效果")]
+    [Tooltip("衝刺時 FOV 增量")] public float fovIncrease = 20f;
+    [Tooltip("Dash 時 Motion Blur 強度 (0~1)")] public float blurIntensity = 1f;
+    [Tooltip("Dash 結束後模糊還原時間")] public float blurRecoverTime = 0.1f;
+
+    // 私有欄位
     private Rigidbody rb;
-    private bool isDashing;
+    private bool isDashing = false;
+    private KeyCode lastTapKey = KeyCode.None;
+    private float lastTapTimeStamp;
+    private float originalFOV;
+    private float lastDashTime = -999f;
+
+    // URP Motion Blur
+    private MotionBlur urpMotionBlur;
+    private float originalBlurIntensity;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
         if (playerCamera == null)
-            Debug.LogError("請在 Inspector 指定 playerCamera！");
+            playerCamera = Camera.main;
+        if (playerCamera == null)
+            Debug.LogError("DoubleTapDash：找不到 Camera，請在 Inspector 指定！");
+
+        originalFOV = playerCamera.fieldOfView;
+
+        // 取得 URP Volume 裡的 MotionBlur Override
+        if (postProcessVolume != null && postProcessVolume.profile.TryGet<MotionBlur>(out urpMotionBlur))
+        {
+            originalBlurIntensity = urpMotionBlur.intensity.value;
+            urpMotionBlur.active = false;
+        }
+        else
+        {
+            Debug.LogWarning("DoubleTapDash：找不到 MotionBlur Override，請在 Volume Profile 裡加入並打勾它。");
+        }
     }
 
     void Update()
     {
         if (isDashing) return;
+
+        // 冷卻檢查
+        if (Time.time - lastDashTime < dashCooldown) return;
 
         TryCheckDoubleTap(KeyCode.W);
         TryCheckDoubleTap(KeyCode.S);
@@ -56,44 +84,32 @@ public class DoubleTapDash : MonoBehaviour
         float elapsed = Time.time - lastTapTimeStamp;
         if (lastTapKey == key && elapsed <= doubleTapTime)
         {
-            // 1. 計算攝影機在水平面上的 forward/right
+            // 計算水平面方向
             Vector3 camF = playerCamera.transform.forward; camF.y = 0; camF.Normalize();
             Vector3 camR = playerCamera.transform.right;   camR.y = 0; camR.Normalize();
-            Vector3 dir = Vector3.zero;
-            switch (key)
-            {
-                case KeyCode.W: dir = camF; break;
-                case KeyCode.S: dir = -camF; break;
-                case KeyCode.A: dir = -camR; break;
-                case KeyCode.D: dir = camR; break;
-            }
+            Vector3 dir = key == KeyCode.W ? camF
+                         : key == KeyCode.S ? -camF
+                         : key == KeyCode.A ? -camR
+                         : camR;
 
-            // 2. 前向碰撞偵測 (SweepTest)
-            float actualDistance = dashDistance;
-            if (rb.SweepTest(dir, out RaycastHit hitInfo, dashDistance + collisionOffset))
-            {
-                // 避開 collisionOffset，確保不穿透
-                actualDistance = hitInfo.distance - collisionOffset;
-            }
+            // 前向障礙偵測
+            float actualDist = dashDistance;
+            if (rb.SweepTest(dir, out RaycastHit hit, dashDistance + collisionOffset))
+                actualDist = Mathf.Max(0f, hit.distance - collisionOffset);
 
-            // 3. 如太短或負值，就不 Dash
-            if (actualDistance <= 0f)
+            if (actualDist <= 0f)
             {
-                Debug.Log("前方障礙太近，無法執行 Dash");
                 lastTapKey = KeyCode.None;
                 return;
             }
 
-            // 4. (Debug) 顯示方向與距離
-            Debug.DrawRay(transform.position, dir * actualDistance, Color.green, 1f);
-            Debug.Log($"DoubleTap {key} ⇒ dir={dir} dist={actualDistance:F2}");
-
-            // 5. 計算目標位置 (水平 + 抬高)
             Vector3 startPos  = transform.position;
-            Vector3 targetPos = startPos + dir * actualDistance + Vector3.up * heightOffset;
+            Vector3 targetPos = startPos + dir * actualDist + Vector3.up * heightOffset;
 
-            // 6. 啟動 Dash
-            StartCoroutine(DashCoroutine(startPos, targetPos));
+            // 記錄冷卻
+            lastDashTime = Time.time;
+            // 執行 Dash 並帶特效
+            StartCoroutine(DashWithEffects(startPos, targetPos));
 
             lastTapKey = KeyCode.None;
         }
@@ -104,25 +120,53 @@ public class DoubleTapDash : MonoBehaviour
         }
     }
 
-    private IEnumerator DashCoroutine(Vector3 startPos, Vector3 targetPos)
+    private IEnumerator DashWithEffects(Vector3 startPos, Vector3 targetPos)
     {
         isDashing = true;
         bool origColl = rb.detectCollisions;
         if (disableCollisions) rb.detectCollisions = false;
+
+        if (urpMotionBlur != null) urpMotionBlur.active = true;
 
         float elapsed = 0f;
         while (elapsed < dashDuration)
         {
             float t = elapsed / dashDuration;
             rb.MovePosition(Vector3.Lerp(startPos, targetPos, t));
+            playerCamera.fieldOfView = Mathf.Lerp(originalFOV, originalFOV + fovIncrease, t);
+            if (urpMotionBlur != null)
+                urpMotionBlur.intensity.value = Mathf.Lerp(originalBlurIntensity, blurIntensity, t);
+
             elapsed += Time.fixedDeltaTime;
             yield return new WaitForFixedUpdate();
         }
 
         rb.MovePosition(targetPos);
+        playerCamera.fieldOfView = originalFOV + fovIncrease;
+        if (urpMotionBlur != null) urpMotionBlur.intensity.value = blurIntensity;
+
         if (disableCollisions) rb.detectCollisions = origColl;
+
+        // 還原 FOV & Motion Blur
+        elapsed = 0f;
+        while (elapsed < blurRecoverTime)
+        {
+            float t = elapsed / blurRecoverTime;
+            playerCamera.fieldOfView = Mathf.Lerp(originalFOV + fovIncrease, originalFOV, t);
+            if (urpMotionBlur != null)
+                urpMotionBlur.intensity.value = Mathf.Lerp(blurIntensity, originalBlurIntensity, t);
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        playerCamera.fieldOfView = originalFOV;
+        if (urpMotionBlur != null)
+        {
+            urpMotionBlur.intensity.value = originalBlurIntensity;
+            urpMotionBlur.active = false;
+        }
+
         isDashing = false;
     }
 }
-
-

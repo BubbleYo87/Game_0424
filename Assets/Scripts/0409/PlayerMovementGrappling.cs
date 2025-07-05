@@ -30,6 +30,11 @@ public class PlayerMovementGrappling : MonoBehaviour
     public float jumpCooldown;       // 跳躍冷卻
     public float airMultiplier;      // 空中移動速度倍率
     bool readyToJump;                // 是否可跳
+    [Header("雙連跳設定")]
+    public int   maxJumpCount       = 2;    // 最多算几次跳跃（1 = 禁双跳，2 = 一次双跳）
+    public float doubleJumpCooldown = 0.5f; // 双跳之间最小间隔（秒）
+    private int   jumpCount         = 0;    // 跳跃次数计数
+    private float lastJumpTime      = -999f;
 
     [Header("Crouching")]
     public float crouchSpeed;        // 蹲下速度
@@ -112,6 +117,9 @@ public class PlayerMovementGrappling : MonoBehaviour
         // 落地檢查
         grounded = Physics.Raycast(transform.position, Vector3.down, playerHeight * 0.5f + 0.2f, whatIsGround);
 
+        // 掉地重置 jumpCount
+        if (grounded && jumpCount != 0)
+            jumpCount = 0;
         MyInput();          // 處理玩家輸入
         SpeedControl();     // 控制速度上限
         StateHandler();     // 狀態管理
@@ -151,12 +159,28 @@ public class PlayerMovementGrappling : MonoBehaviour
         horizontalInput = Input.GetAxisRaw("Horizontal");
         verticalInput = Input.GetAxisRaw("Vertical");
 
-        // 跳躍
-        if (Input.GetKey(jumpKey) && readyToJump && grounded)
+        // **改造跳跃逻辑** **
+        if (Input.GetKeyDown(jumpKey) && readyToJump)
         {
-            readyToJump = false;
-            Jump();
-            Invoke(nameof(ResetJump), jumpCooldown);
+            // 普通起跳
+            if (grounded)
+            {
+                Jump();
+                jumpCount = 1;
+                lastJumpTime = Time.time;
+                readyToJump = false;
+                Invoke(nameof(ResetJump), jumpCooldown);
+            }
+            // 双跳判定
+            else if (jumpCount < maxJumpCount 
+                  && Time.time - lastJumpTime >= doubleJumpCooldown)
+            {
+                Jump();
+                jumpCount++;
+                lastJumpTime = Time.time;
+                readyToJump = false;
+                Invoke(nameof(ResetJump), jumpCooldown);
+            }
         }
 
         // 開始蹲下
