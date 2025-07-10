@@ -9,7 +9,7 @@ public class BillboardUIHub : MonoBehaviour
     void Start()
     {
         if (mainCamera == null)
-            mainCamera = Camera.main;
+            mainCamera = GameObject.Find("MainCamera")?.GetComponent<Camera>();
     }
 
     void LateUpdate()

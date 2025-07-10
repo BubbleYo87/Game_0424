@@ -96,6 +96,11 @@ public class PlayerAnimationController : MonoBehaviour
             }
         }
 
+        if (Input.GetMouseButtonDown(1) && !isAttack)
+        {
+            animator.SetTrigger("vine");
+        }
+
         if (timer != 0)
         {
             timer -= Time.deltaTime; ;

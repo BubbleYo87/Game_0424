@@ -60,7 +60,7 @@ public class DashOnLook_Rigidbody : MonoBehaviour
     private void Update()
     {
         UpdateDashAvailability();
-        if (canDash && !isDashing && Input.GetMouseButtonDown(0))
+        if (canDash && !isDashing && Input.GetMouseButtonDown(1))
             StartDashCoroutine();
     }
 
