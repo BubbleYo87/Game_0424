@@ -57,7 +57,7 @@ public class PlayerAnimationController : MonoBehaviour
         if (animator == null || rb == null) return;
 
         Atk_Monitor();
-        Debug.Log(isAttack);
+        //Debug.Log(isAttack);
 
         // ✅ Q 鍵切換武器模式
         if (Input.GetKeyDown(KeyCode.Q))
@@ -201,8 +201,8 @@ public class PlayerAnimationController : MonoBehaviour
             // 4. 開槍瞬間，也貼「我要震動」的公告
             GameEvents.TriggerCameraShake(0.10f, 0.20f);
         }
-
-        isShooting = false;
+        if(isShooting)
+            isShooting = false;
     }
 
     private void Atk_Monitor()
@@ -267,4 +267,9 @@ public class PlayerAnimationController : MonoBehaviour
         swordCollider.enabled = false;
         isAttack = false;
     }
+    public void ResetFire()
+    {
+        isShooting = false;
+    }
+
 }

@@ -37,6 +37,12 @@ public class Enemy_BoomB : MonoBehaviour
     [Tooltip("血條物件陣列，長度請設定為 maxHP+1")]
     public GameObject[] hpBars;                   // 各血量對應的 UI 切換
 
+    [Header("攻擊參數")]
+    [Tooltip("觸發攻擊的最小距離")]
+    public float attackDistance = 5f;         // 距離玩家小於此值就攻擊
+    [Tooltip("攻擊時 NavMeshAgent 的速度")]
+    public float attackSpeed = 10f;           // 攻擊時的衝刺速度
+
     // —— 私有欄位 —— 
     private NavMeshAgent agent;                   // NavMeshAgent 參考
     private Vector3 homeCenter;                   // 初始家中位置，用於返家時隨機範圍
@@ -51,6 +57,7 @@ public class Enemy_BoomB : MonoBehaviour
     private enum State { Idle, Chasing, Returning, Hit }  // 敵人狀態列舉
     private State currentState = State.Idle;      // 目前狀態，預設 Idle
     private State lastState = State.Idle;         // 上一次狀態，用於 Debug 切換
+    private bool hasBoomed = false;           // 是否已經觸發過一次攻擊
     // ----- 新增私有欄位 -----
     private Animator childAnimator;  // 子物件的 Animator
     // -------------------------
@@ -121,6 +128,24 @@ public class Enemy_BoomB : MonoBehaviour
 
         // 每幀同步速度參數
         SyncSpeedWithAnimator();
+        float dist = Vector3.Distance(transform.position, player.position);
+
+        // —— 新增：距離檢查攻擊觸發 —— 
+        if (!hasBoomed && player != null)
+        {
+            if (dist < attackDistance)
+            {
+                // 1. 觸發攻擊動畫
+                childAnimator.SetTrigger("BoomB_Attack");
+                agent.isStopped = true;
+                // 2. 調整速度並快速向玩家靠近
+                /* agent.speed = attackSpeed;
+                agent.isStopped = false;
+                agent.SetDestination(player.position); */
+
+                hasBoomed = true;  // 只執行一次
+            }
+        }
     }
 
     /// <summary>
@@ -257,7 +282,7 @@ public class Enemy_BoomB : MonoBehaviour
     /// </summary>
     public void TakeDamage(int dmg = 1)
     {
-        childAnimator?.SetTrigger("BoomB_Die");  // 播放被擊打動畫
+        Boom();
         currentHP = Mathf.Clamp(currentHP - dmg, 0, maxHP);
         UpdateHPBars();
 
@@ -285,10 +310,9 @@ public class Enemy_BoomB : MonoBehaviour
     // 若玩家用 Trigger 方式接觸到敵人，則造成傷害
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (other.CompareTag("Player") || other.CompareTag("P_Bullet"))
             TakeDamage(1);
     }
-
     /// <summary>
     /// 更新血條陣列顯示，只有 index == currentHP 的那個物件顯示
     /// </summary>
@@ -329,5 +353,27 @@ public class Enemy_BoomB : MonoBehaviour
         // 3. （可選）也把這個參數值同步回 agent.speed，
         //    如果你想讓 Animator 控制真正的行走速度，就打開下一行：
         // agent.speed = childAnimator.GetFloat("BoomB_Speed");
+    }
+    [Header("Boom 功能")]
+    [Tooltip("Boom 時要打開的單一物件")]
+    public GameObject BoomBaby1;  // 在 Inspector 指定要打開的那個物件
+    [Tooltip("Boom 時要關閉的單一物件")]
+    public GameObject BoomBaby0;    // 指定要關閉的物件
+
+
+    /// <summary>
+    /// 觸發 Boom：開啟 objectToEnable，關閉 objectToDisable
+    /// </summary>
+    public void Boom()
+    {
+        agent.isStopped = true;
+        if (BoomBaby1 != null)
+            BoomBaby1.SetActive(true);
+
+        if (BoomBaby0 != null)
+        {
+            BoomBaby0.SetActive(false);
+            Destroy(BoomBaby0); 
+        }
     }
 }
