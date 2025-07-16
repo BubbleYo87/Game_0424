@@ -11,6 +11,7 @@ TagManager:
   - P_Bullet
   - E_Bullet
   - Enemy
+  - EnemysDMG
   layers:
   - Default
   - TransparentFX

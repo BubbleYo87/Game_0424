@@ -11,7 +11,7 @@ AnimatorStateMachine:
   m_ChildStates:
   - serializedVersion: 1
     m_State: {fileID: 5010974649981637264}
-    m_Position: {x: 270, y: 110, z: 0}
+    m_Position: {x: 300, y: 120, z: 0}
   m_ChildStateMachines: []
   m_AnyStateTransitions: []
   m_EntryTransitions: []
@@ -52,7 +52,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: BoomB_Die
-  m_Speed: 3
+  m_Speed: 4
   m_CycleOffset: 0
   m_Transitions: []
   m_StateMachineBehaviours: []

@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UI;
+using UnityEngine.VFX;
 using System.Collections;
 
 [RequireComponent(typeof(NavMeshAgent))]  // 確保物件上有 NavMeshAgent 元件
@@ -36,12 +38,36 @@ public class Enemy_BoomB : MonoBehaviour
     public int maxHP = 3;                         // 敵人總血量
     [Tooltip("血條物件陣列，長度請設定為 maxHP+1")]
     public GameObject[] hpBars;                   // 各血量對應的 UI 切換
+    private int currentHP;                        // 當前血量
 
     [Header("攻擊參數")]
     [Tooltip("觸發攻擊的最小距離")]
     public float attackDistance = 5f;         // 距離玩家小於此值就攻擊
     [Tooltip("攻擊時 NavMeshAgent 的速度")]
     public float attackSpeed = 10f;           // 攻擊時的衝刺速度
+    /// <summary>
+    /// Boom 時計算出的傷害值（1~100 浮點數）
+    /// </summary>
+    [HideInInspector]
+    public float LastDamageValue;
+    [Header("Boom 範圍設定")]
+    [Tooltip("爆炸判定用的 Collider 所在子物件名稱（請跟 Inspector 裡的 GameObject 名稱吻合）")]
+    public string boomColliderObjectName = "Boom_Attack";  // 預設子物件名
+    private Collider boomCollider;  // 存放自動找到的 Collider
+    [Header("爆炸特效 (ParticleSystem)")]
+    [Tooltip("把預先放在子物件或 Prefab 上的 ParticleSystem 拖到這裡")]
+    public ParticleSystem boomVFX;
+    [Header("玩家狀態參考")]
+    [Tooltip("請在 Inspector 把玩家那個含 TakeDamage bool 的腳本拖進來")]
+    public PlayerMovementGrappling playerMovementGrappling;        // 假設你的玩家腳本 
+
+    [Header("BoomAttack 物件參考")]
+    [Tooltip("場景中代表爆炸判定的物件")]
+    public Transform boomAttackObject;       // 拖入名稱為 BoomAttack 的物件
+
+    [Header("UI 顯示設定")]
+    [Tooltip("拖要顯示距離的 Image，必須有 CanvasRenderer")]
+    public Image boomUIImage;                // 拖入要顯示的那張 Image
 
     // —— 私有欄位 —— 
     private NavMeshAgent agent;                   // NavMeshAgent 參考
@@ -52,8 +78,7 @@ public class Enemy_BoomB : MonoBehaviour
     private bool isIdleRotating;                  // 是否正在執行掃視 Coroutine
     private Quaternion idleStartRot;              // 掃視起始旋轉
     private Quaternion idleTargetRot;             // 掃視目標旋轉
-
-    private int currentHP;                        // 當前血量
+    
     private enum State { Idle, Chasing, Returning, Hit }  // 敵人狀態列舉
     private State currentState = State.Idle;      // 目前狀態，預設 Idle
     private State lastState = State.Idle;         // 上一次狀態，用於 Debug 切換
@@ -65,15 +90,51 @@ public class Enemy_BoomB : MonoBehaviour
     // 在 Awake 階段確認 player 參考是否設定
     void Awake()
     {
+        // … 前面找 player 的程式 …
+        //── 確保 player 一定要被賦值 ──
         if (player == null)
         {
             var go = GameObject.FindGameObjectWithTag("Player");
             if (go != null)
                 player = go.transform;
             else
-                Debug.LogError("[Enemy_BoomB] 找不到 Tag 為 Player 的物件");
+                Debug.LogError("[Enemy_BoomB] 無法找到 Tag 為 'Player' 的物件，請確認已經設定 Tag");
+        }
+        // 如果 Inspector 沒設，就自動抓
+        if (playerMovementGrappling == null && player != null)
+            playerMovementGrappling = player.GetComponent<PlayerMovementGrappling>();
+
+        // BoomAttack 子物件
+        if (boomAttackObject == null)
+        {
+            // 以前：var tf = …
+            Transform boomAtkTf = transform.root.Find("Boom_Attack");
+            if (boomAtkTf != null)
+                boomAttackObject = boomAtkTf;
+        }
+
+        // UI Image 物件
+        if (boomUIImage == null)
+        {
+            // 以前：var go = …
+            GameObject uiGo = GameObject.Find("BoomB_AtkEff_S");
+            if (uiGo != null)
+                boomUIImage = uiGo.GetComponent<Image>();
+        }
+
+        // Collider 子物件（同理改名）
+        Transform colliderTf = transform.Find(boomColliderObjectName);
+        if (colliderTf != null)
+        {
+            boomCollider = colliderTf.GetComponent<Collider>();
+            // …
+        }
+        else
+        {
+            Debug.LogError($"[Enemy_BoomB] 找不到子物件「{boomColliderObjectName}」");
         }
     }
+
 
     // 初始化 NavMeshAgent、血量與 Idle 計時器
     void Start()
@@ -122,7 +183,7 @@ public class Enemy_BoomB : MonoBehaviour
         // 若狀態有變化，印出 Debug 訊息
         if (currentState != lastState)
         {
-            Debug.Log($"[Enemy_BoomB] {lastState} -> {currentState}");
+            // Debug.Log($"[Enemy_BoomB] {lastState} -> {currentState}");
             lastState = currentState;
         }
 
@@ -131,7 +192,7 @@ public class Enemy_BoomB : MonoBehaviour
         float dist = Vector3.Distance(transform.position, player.position);
 
         // —— 新增：距離檢查攻擊觸發 —— 
-        if (!hasBoomed && player != null)
+        if (!hasBoomed && player != null && currentState == State.Chasing)
         {
             if (dist < attackDistance)
             {
@@ -311,7 +372,9 @@ public class Enemy_BoomB : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Player") || other.CompareTag("P_Bullet"))
+        {
             TakeDamage(1);
+        }
     }
     /// <summary>
     /// 更新血條陣列顯示，只有 index == currentHP 的那個物件顯示
@@ -367,13 +430,76 @@ public class Enemy_BoomB : MonoBehaviour
     public void Boom()
     {
         agent.isStopped = true;
-        if (BoomBaby1 != null)
-            BoomBaby1.SetActive(true);
 
-        if (BoomBaby0 != null)
+        // —— 在啟動 Collider 或特效之前就先算好傷害值 —— 
+        float dist = Vector3.Distance(boomAttackObject.position, player.position);
+        float normalized = Mathf.Clamp01(1f - dist / detectionRadius);
+        LastDamageValue = Mathf.Lerp(1f, 100f, normalized);
+        Debug.Log($"[BoomUI] value = {LastDamageValue}");
+
+        // —— 原本的 BoomBaby1/BoomBaby0 邏輯 —— 
+        if (BoomBaby1 != null) BoomBaby1.SetActive(true);
+        if (BoomBaby0 != null) { BoomBaby0.SetActive(false); Destroy(BoomBaby0); }
+
+        // —— 啟動爆炸範圍 Collider —— 
+        if (boomCollider != null)
+            StartCoroutine(EnableAndDisableBoomCollider());
+
+        // —— 啟動粒子特效 —— 
+        if (boomVFX != null)
         {
-            BoomBaby0.SetActive(false);
-            Destroy(BoomBaby0); 
+            // 確保從頭播放
+            boomVFX.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            boomVFX.Play();
         }
+        // —— 新增：UI 提示 —— 
+        StartCoroutine(HandleBoomUIFeedback());
+    }
+    private IEnumerator EnableAndDisableBoomCollider()
+    {
+        boomCollider.enabled = true;            // 瞬間開啟
+        yield return new WaitForSeconds(0.3f);  // 等 0.3 秒
+        boomCollider.enabled = false;           // 再關閉
+    }
+        /// <summary>
+    /// Boom() 之後：  
+    /// 1. 檢查 playerMovementGrappling.TakeDamage  
+    /// 2. 算出 boomAttackObject 與 player 的距離映射到 1~100  
+    /// 3. Debug.Log 距離值  
+    /// 4. 設定 boomUIImage 的透明度並顯示  
+    /// 5. 等候（100→5秒，1→1秒），再關閉 Image  
+    /// </summary>
+    private IEnumerator HandleBoomUIFeedback()
+    {
+        // 等玩家受傷
+        yield return new WaitUntil(() => playerMovementGrappling != null && playerMovementGrappling.hasTakenDamage);
+        
+        // 計算距離、value
+        float dist = Vector3.Distance(boomAttackObject.position, player.position);
+        float normalized = Mathf.Clamp01(1f - dist / detectionRadius);
+        float value = Mathf.Lerp(1f, 100f, normalized);
+        /* Debug.Log($"[BoomUI] value = {value}");
+ */
+        // 顯示並設定 alpha
+        boomUIImage.gameObject.SetActive(true);
+        Color c = boomUIImage.color;
+        c.a = value / 100f;
+        boomUIImage.color = c;
+
+        // 線性映射到 [1,5] 區間
+        float duration = Mathf.Lerp(1f, 5f, value / 100f);
+        Debug.Log($"[BoomUI] 等待 {duration:F2} 秒");
+
+        // 用 unscaledDeltaTime 手動倒數
+        float timer = 0f;
+        while (timer < duration)
+        {
+            timer += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // 倒數結束，關閉 UI
+        Debug.Log("[BoomUI] Manual 倒數結束，Hide Image");
+        boomUIImage.gameObject.SetActive(false);
     }
 }

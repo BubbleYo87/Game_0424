@@ -64,6 +64,16 @@ public class PlayerMovementGrappling : MonoBehaviour
     [Header("Grappling")]
     public float timeToTarget;       // 到達目標的時間（鉤爪用）
 
+    [Header("血量系統")]
+    [Tooltip("最大血量")] 
+    public float maxHP = 100;                         // 總血量
+    private float currentHP;                        // 當前血量
+/*  [Tooltip("血條物件陣列，長度請設定為 maxHP+1")]
+    public GameObject[] hpBars;                   // 各血量對應的 UI 切換 */
+    [Tooltip("剛剛是否被傷害過，用來讓 Enemy_BoomB 顯示 UI")]
+    public bool hasTakenDamage = false;
+    public float damageFlagDuration = 1f;  // 受傷後這段秒數內都算「剛受傷」
+
     // 玩家輸入
     float horizontalInput;           // 水平輸入
     float verticalInput;             // 垂直輸入
@@ -109,6 +119,7 @@ public class PlayerMovementGrappling : MonoBehaviour
         rb.freezeRotation = true;            // 鎖定旋轉
         readyToJump = true;                  // 可跳
         startYScale = transform.localScale.y;// 初始Y縮放
+        currentHP = maxHP;                // 設定初始血量
     }
 
     // 每幀更新
@@ -498,6 +509,58 @@ public class PlayerMovementGrappling : MonoBehaviour
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
     }
+    // 若玩家用 Trigger 方式接觸到敵人，則造成傷害
+    private void OnTriggerEnter(Collider other)
+    {
+        if(hasTakenDamage)
+        {
+            Debug.LogWarning("OnTriggerEnter: 玩家剛受傷，忽略此次傷害");
+            return; // 忽略已受傷的情況
+        }
+        // 往父物件搜尋 Enemy_BoomB 腳本
+        Enemy_BoomB boom = other.GetComponentInParent<Enemy_BoomB>();
+        if (boom != null)
+        {
+            float dmg = boom.LastDamageValue;
+            TakeDamage(dmg);
+        }
+        else
+        {
+            Debug.LogWarning("OnTriggerEnter: 找不到父物件上的 Enemy_BoomB");
+        }
+    }
+
+    /// <summary>
+    /// 受到傷害時呼叫，更新血量，切換血條，死亡或進入 Hit 狀態
+    /// </summary>
+    public void TakeDamage(float amount)
+    {
+        // 1. 標記受傷 flag
+        hasTakenDamage = true;
+        StartCoroutine(ResetDamageFlagAfterDelay());
+
+        // 2. 扣血（浮點數）
+        currentHP = Mathf.Clamp(currentHP - amount, 0f, maxHP);
+        Debug.Log($"[Player] 受到 {amount:F1} 點傷害，剩餘 HP={currentHP:F1}");
+
+        // 3. 鏡頭抖動
+        GameEvents.TriggerCameraShake(0.4f, 0.7f);
+
+        // 4. 死亡處理
+        if (currentHP <= 0f)
+            Die();
+    }
+    private IEnumerator ResetDamageFlagAfterDelay()
+    {
+        yield return new WaitForSeconds(damageFlagDuration);
+        hasTakenDamage = false;
+    }
+    private void Die()
+    {
+        Debug.Log("[Player] 死亡！");
+        // 例如重載場景、播放動畫…
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
 
     // 判斷是否在斜坡
     private bool OnSlope()
@@ -539,6 +602,7 @@ public class PlayerMovementGrappling : MonoBehaviour
 
     public TextMeshProUGUI text_speed; // 速度顯示
     public TextMeshProUGUI text_mode;  // 狀態顯示
+    public TextMeshProUGUI text_hp;  // HP顯示
     private void TextStuff()
     {
         Vector3 flatVel = new Vector3(rb.velocity.x, 0f, rb.velocity.z);
@@ -547,8 +611,9 @@ public class PlayerMovementGrappling : MonoBehaviour
             text_speed.SetText("移動速度: " + Round(rb.velocity.magnitude, 1) + " / " + Round(moveSpeed, 1));
         else
             text_speed.SetText("移動速度: " + Round(flatVel.magnitude, 1) + " / " + Round(moveSpeed, 1));
-
         text_mode.SetText("運作模式: " + state.ToString());
+        // 小數點後保留 1 位
+        text_hp.SetText($"血量: {currentHP:F1} / {maxHP}");
     }
 
     // 四捨五入

@@ -4,25 +4,33 @@ using UnityEngine;
 
 public class BoomB_Destroy : MonoBehaviour
 {
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-    // 在 Animation Event 中呼叫此函式即可摧毀該物件
     /// <summary>
-    /// 摧毀當前物件的父物件
+    /// 關閉父物件的所有 Collider 與 Renderer，並在 5 秒後銷毀父物件
+    /// （可從 Animation Event 或程式邏輯中呼叫）
     /// </summary>
     public void DestroyParent()
     {
-        if (transform.parent != null)
-        Destroy(transform.parent.gameObject , 0.05f);
-    }
+        Transform parent = transform.parent;
+        if (parent == null) return;
 
+        GameObject parentGO = parent.gameObject;
+
+        // 1. 關閉所有 Collider（包括子孫物件上的）
+        Collider[] colliders = parentGO.GetComponentsInChildren<Collider>();
+        foreach (var col in colliders)
+        {
+            col.enabled = false;
+        }
+
+        // 2. 關閉所有 Renderer（MeshRenderer、SkinnedMeshRenderer、SpriteRenderer…）
+        //    確保模型及各種可視化都隱藏
+        Renderer[] renderers = parentGO.GetComponentsInChildren<Renderer>();
+        foreach (var rend in renderers)
+        {
+            rend.enabled = false;
+        }
+
+        // 3. 延遲 5 秒後才真正銷毀父物件
+        Destroy(parentGO, 5f);
+    }
 }
