@@ -29,6 +29,9 @@ public class DoubleTapDash : MonoBehaviour
     [Tooltip("Dash 時 Motion Blur 強度 (0~1)")] public float blurIntensity = 1f;
     [Tooltip("Dash 結束後模糊還原時間")] public float blurRecoverTime = 0.1f;
 
+    [Header("外部 Animator 參考")]
+    [Tooltip("用來播放 Dash 動畫的 Animator")] public Animator targetAnimator;
+
     // 私有欄位
     private Rigidbody rb;
     private bool isDashing = false;
@@ -62,6 +65,10 @@ public class DoubleTapDash : MonoBehaviour
         {
             Debug.LogWarning("DoubleTapDash：找不到 MotionBlur Override，請在 Volume Profile 裡加入並打勾它。");
         }
+
+        // 檢查是否已經把目標 Animator 指定進來
+        if (targetAnimator == null)
+            Debug.LogWarning("DoubleTapDash：目標 Animator (targetAnimator) 未指定，將無法觸發 Dash 動畫。");
     }
 
     void Update()
@@ -79,7 +86,8 @@ public class DoubleTapDash : MonoBehaviour
 
     private void TryCheckDoubleTap(KeyCode key)
     {
-        if (!Input.GetKeyDown(key)) return;
+        if (!Input.GetKeyDown(key)) 
+            return;
 
         float elapsed = Time.time - lastTapTimeStamp;
         if (lastTapKey == key && elapsed <= doubleTapTime)
@@ -88,36 +96,67 @@ public class DoubleTapDash : MonoBehaviour
             Vector3 camF = playerCamera.transform.forward; camF.y = 0; camF.Normalize();
             Vector3 camR = playerCamera.transform.right;   camR.y = 0; camR.Normalize();
             Vector3 dir = key == KeyCode.W ? camF
-                         : key == KeyCode.S ? -camF
-                         : key == KeyCode.A ? -camR
-                         : camR;
+                        : key == KeyCode.S ? -camF
+                        : key == KeyCode.A ? -camR
+                        : camR;
 
-            // 前向障礙偵測
+            // 前向障礙偵測，算出實際可 Dash 距離
             float actualDist = dashDistance;
             if (rb.SweepTest(dir, out RaycastHit hit, dashDistance + collisionOffset))
                 actualDist = Mathf.Max(0f, hit.distance - collisionOffset);
 
+            // 如果實際距離 <= 0，表示在預留距離內就被擋住 → Dash 失敗
             if (actualDist <= 0f)
             {
+                // 清除 lastTapKey，等待下一次連擊
                 lastTapKey = KeyCode.None;
+                // 不觸發任何動畫，也不進行 Dash
                 return;
             }
 
+            // 到這裡才是真正能成功 Dash，先觸發對應的 Animator Trigger
+            TriggerDashAnimation(key);
+
+            // 準備執行 Dash：計算起點與終點
             Vector3 startPos  = transform.position;
             Vector3 targetPos = startPos + dir * actualDist + Vector3.up * heightOffset;
 
-            // 記錄冷卻
+            // 記錄冷卻時間戳
             lastDashTime = Time.time;
             // 執行 Dash 並帶特效
             StartCoroutine(DashWithEffects(startPos, targetPos));
 
+            // 清除 lastTapKey，避免重複觸發
             lastTapKey = KeyCode.None;
         }
         else
         {
+            // 如果還沒達到 double-tap 條件，更新 lastTapKey/Time
             lastTapKey = key;
             lastTapTimeStamp = Time.time;
         }
+    }
+
+
+    /// <summary>
+    /// 根據按鍵觸發對應的 Dash 動畫 Trigger，
+    /// 例如 W → "Dash_Front"、S → "Dash_Back"、A → "Dash_Left"、D → "Dash_Right"
+    /// </summary>
+    private void TriggerDashAnimation(KeyCode key)
+    {
+        if (targetAnimator == null) return;
+
+        string triggerName = key switch
+        {
+            KeyCode.W => "Dash_Front",
+            KeyCode.S => "Dash_Back",
+            KeyCode.A => "Dash_Left",
+            KeyCode.D => "Dash_Right",
+            _ => null
+        };
+
+        if (!string.IsNullOrEmpty(triggerName))
+            targetAnimator.SetTrigger(triggerName);
     }
 
     private IEnumerator DashWithEffects(Vector3 startPos, Vector3 targetPos)

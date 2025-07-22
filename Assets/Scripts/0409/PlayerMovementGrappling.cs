@@ -524,10 +524,6 @@ public class PlayerMovementGrappling : MonoBehaviour
             float dmg = boom.LastDamageValue;
             TakeDamage(dmg);
         }
-        else
-        {
-            Debug.LogWarning("OnTriggerEnter: 找不到父物件上的 Enemy_BoomB");
-        }
     }
 
     /// <summary>
@@ -559,7 +555,7 @@ public class PlayerMovementGrappling : MonoBehaviour
     {
         Debug.Log("[Player] 死亡！");
         // 例如重載場景、播放動畫…
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        // SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     // 判斷是否在斜坡
