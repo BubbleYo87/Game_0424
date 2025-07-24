@@ -167,6 +167,8 @@ public class Guy_2_Script : MonoBehaviour
                 HandleChasing(); // 處理追擊邏輯
                 break;
             case State.Attacking:
+                Lookat(player.position);   // 持續轉向玩家
+                break;
             case State.Drunk:
             case State.Hit:
                 // 攻擊、醉酒或受擊時皆停止移動
@@ -449,6 +451,7 @@ public class Guy_2_Script : MonoBehaviour
     // AnimationEvent：丟石頭，啟用 Collider 並啟動飛行協程
     public void ThrowStone()
     {
+
         if (currentStone == null) return;
         // 從手上鬆綁
         currentStone.transform.SetParent(null);
