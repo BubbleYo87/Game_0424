@@ -73,6 +73,15 @@ public class PlayerMovementGrappling : MonoBehaviour
     [Tooltip("剛剛是否被傷害過，用來讓 Enemy_BoomB 顯示 UI")]
     public bool hasTakenDamage = false;
     public float damageFlagDuration = 1f;  // 受傷後這段秒數內都算「剛受傷」
+    [Header("被打飛設定(純位移)")]
+    [Tooltip("擊退持續時間（秒）")]
+    public float knockbackDuration = 0.5f;
+    [Tooltip("擊退速度 (單位：單位/秒)")]
+    public float knockbackSpeed = 25f;
+    // 狀態用變數
+    private bool isKnockback = false;           // 是否正在被擊退
+    private Vector3 knockbackDirection;         // 擊退方向
+    private float knockbackTimer = 0f;          // 計時用
 
     // 玩家輸入
     float horizontalInput;           // 水平輸入
@@ -125,6 +134,39 @@ public class PlayerMovementGrappling : MonoBehaviour
     // 每幀更新
     private void Update()
     {
+        // Update() 裡，取代原本的「if (isKnockback) { … transform.position += … }」區塊
+        if (isKnockback)
+        {
+            // 每幀欲位移的距離
+            float step = knockbackSpeed * Time.deltaTime;
+            // 緩衝半徑，避免緊貼 collider 卡住穿透
+            float skin = 0.1f;
+
+            // 1. 朝 knockbackDirection 打一條射線，長度 = step + skin
+            if (Physics.Raycast(transform.position, knockbackDirection, out RaycastHit hit, step + skin, whatIsGround))
+            {
+                // 2a. 如果前方有障礙 (hit)，就把玩家卡在障礙表面前 skin 距離
+                Vector3 safePos = hit.point + hit.normal * skin;
+                transform.position = safePos;
+
+                // 結束擊退
+                EndKnockback();
+            }
+            else
+            {
+                // 2b. 沒碰到阻擋，就正常往後位移
+                transform.position += knockbackDirection * step;
+
+                // 倒數計時，檢查是否結束
+                knockbackTimer -= Time.deltaTime;
+                if (knockbackTimer <= 0f)
+                    EndKnockback();
+            }
+
+            // 跳過後續移動／輸入機制
+            return;
+        }
+
         // 落地檢查
         grounded = Physics.Raycast(transform.position, Vector3.down, playerHeight * 0.5f + 0.2f, whatIsGround);
 
@@ -153,6 +195,13 @@ public class PlayerMovementGrappling : MonoBehaviour
             float maxSpeed = 20f;
             if (rb.velocity.magnitude > maxSpeed)
                 rb.velocity = rb.velocity.normalized * maxSpeed;
+        }
+
+        if (!isKnockback)
+        {
+            if (activeGrapple && rb.velocity.magnitude > 20f)
+                rb.velocity = rb.velocity.normalized * 20f;
+            MovePlayer();
         }
 
         MovePlayer(); // 執行移動
@@ -503,11 +552,6 @@ public class PlayerMovementGrappling : MonoBehaviour
             ResetRestrictions();
             //GetComponent<DualHooks>().CancelActiveGrapples();
         }
-        if (collision.collider.CompareTag("E_Bullet"))
-        {
-            // 重新讀取目前場景
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-        }
     }
     // 若玩家用 Trigger 方式接觸到敵人，則造成傷害
     private void OnTriggerEnter(Collider other)
@@ -523,6 +567,15 @@ public class PlayerMovementGrappling : MonoBehaviour
         {
             float dmg = boom.LastDamageValue;
             TakeDamage(dmg);
+        }
+        // 2. 碰到名為 Enemys_DMG_Guy_Rock 的 Trigger
+        if (other.CompareTag("Enemys_DMG_Guy_Rock"))
+        {
+            // 扣 30 點血
+            TakeDamage(30f);
+            // 啟動擊退
+            StartKnockback();
+            return;
         }
     }
 
@@ -626,4 +679,28 @@ public class PlayerMovementGrappling : MonoBehaviour
     }
 
     #endregion
+
+    /// <summary>
+    /// 啟動純位移擊退
+    /// </summary>
+    private void StartKnockback()
+    {
+        // 1. 進入擊退狀態，凍結原本的移動機制
+        freeze = true;
+        isKnockback = true;
+
+        // 2. 計算擊退方向：往玩家背後
+        knockbackDirection = -orientation.forward.normalized;
+
+        // 3. 設定倒數計時器
+        knockbackTimer = knockbackDuration;
+    }
+    /// <summary>
+    /// 結束擊退的共用方法
+    /// </summary>
+    private void EndKnockback()
+    {
+        isKnockback = false;
+        freeze = false;
+    }
 }

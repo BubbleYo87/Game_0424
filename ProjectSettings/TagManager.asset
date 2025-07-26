@@ -12,6 +12,7 @@ TagManager:
   - E_Bullet
   - Enemy
   - EnemysDMG
+  - Enemys_DMG_Guy_Rock
   layers:
   - Default
   - TransparentFX

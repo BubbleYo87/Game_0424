@@ -41,6 +41,27 @@ public class Guy_2_Script : MonoBehaviour
     private GameObject currentStone;   // 手上那顆
     private Coroutine flyingRoutine;   // 飛行協程
     #endregion
+    // 在 Guy_2_Script 類別最上方的參數區新增：
+    [Header("Plan 指示器參數")]
+    [Tooltip("要顯示的 Plan 預製件 (必須包含可調透明度的材質)")]
+    public GameObject planPrefab;
+    [Tooltip("Plan 的寬度 (X 軸)")]
+    public float planWidth = 0.3f;
+    [Tooltip("閃爍頻率 (Hz)")]
+    public float flickerFrequency = 2f;
+    [Tooltip("閃爍最低透明度")]
+    public float flickerMinAlpha = 0.2f;
+    [Tooltip("閃爍最高透明度")]
+    public float flickerMaxAlpha = 0.8f;
+    [Tooltip("淡出 Plan 持續時間 (秒)")]
+    public float fadeOutDuration = 0.5f;
+
+    // 私有欄位
+    private GameObject planInstance;      // 當前的 Plan 實例
+    private Material  planMaterial;      // 用來控制透明度的材質
+    private Coroutine flickerCoroutine;  // 閃爍協程引用
+    private Coroutine  updatePlanCoroutine; // 更新 Plan 狀態的協程引用
+    private bool       isPlanFixed = false;   // 是否已經固定 Plan 位置
 
     #region 動畫參數
     [Header("動畫參數名稱")]
@@ -451,50 +472,46 @@ public class Guy_2_Script : MonoBehaviour
     // AnimationEvent：丟石頭，啟用 Collider 並啟動飛行協程
     public void ThrowStone()
     {
-
         if (currentStone == null) return;
-        // 從手上鬆綁
-        currentStone.transform.SetParent(null);
 
-        // 啟用碰撞
+        // 從手上鬆綁 & 啟用碰撞
+        currentStone.transform.SetParent(null);
         var col = currentStone.GetComponent<Collider>();
         if (col != null) col.enabled = true;
 
-        // 計算當下玩家位置的方向
-        Vector3 targetPos = player.position;
-        Vector3 dir = (targetPos - stoneSpawnPoint.position).normalized;
+        // 計算延伸到玩家前方 50m 的終點
+        Vector3 baseDir = (player.position - stoneSpawnPoint.position).normalized;
+        Vector3 endPoint = player.position + baseDir * 50f;
 
-        // 開啟協程：直線飛行 + Raycast 偵測
-        flyingRoutine = StartCoroutine(MoveStoneStraight(currentStone, dir, throwSpeed, 5f));
+        // 啟動協程：往 endPoint 直線飛行
+        flyingRoutine = StartCoroutine(MoveStoneStraight(currentStone, endPoint, throwSpeed, 5f));
 
         // 切回追擊
         currentState = State.Chasing;
         agent.isStopped = false;
     }
-    // 協程：直線飛行並用 Raycast 檢測命中
-    private IEnumerator MoveStoneStraight(GameObject stone, Vector3 dir, float speed, float maxTime)
+    // 協程：直線飛到指定終點再銷毀
+    private IEnumerator MoveStoneStraight(GameObject stone, Vector3 endPos, float speed, float maxTime)
     {
         float t = 0f;
-        Vector3 targetPos = player.position;  // 本來就算好的方向
         while (t < maxTime && stone != null)
         {
-            // 每幀往目標位置直線移動：crossSceneDistance = speed * deltaTime
+            // 每幀直線靠近終點
             stone.transform.position = Vector3.MoveTowards(
                 stone.transform.position,
-                targetPos,
+                endPos,
                 speed * Time.deltaTime
             );
-            // 若已經到目標，就結束
-            if (Vector3.Distance(stone.transform.position, targetPos) < 0.1f)
-            {
-                // 你可以在這裡做命中處理…
+            // 如果已經到達終點，或者非常接近，就跳出
+            if (Vector3.Distance(stone.transform.position, endPos) < 0.1f)
                 break;
-            }
+
             t += Time.deltaTime;
             yield return null;
         }
         if (stone != null) Destroy(stone);
     }
+
     
     /// <summary>
     /// 讓 NPC 面向指定世界座標
@@ -507,4 +524,177 @@ public class Guy_2_Script : MonoBehaviour
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSpeed);
     }
 
+    // -----------------------------
+    // Step1：顯示並開始閃爍 Plan
+    // -----------------------------
+    public void ShowPlanIndicator()
+    {
+        if (planPrefab == null || player == null)
+        {
+            Debug.LogWarning("[Plan] prefab or player 未設定，跳過顯示");
+            return;
+        }
+
+        // 1. 刪除舊的
+        if (planInstance != null)
+        {
+            Destroy(planInstance);
+            planInstance = null;
+        }
+
+        // 2. 第一次實例化，位置暫且放在 NPC
+        planInstance = Instantiate(planPrefab, transform.position, Quaternion.identity);
+        planInstance.transform.localScale = Vector3.one;
+
+        // 3. 取材質，切換成透明模式
+        var rend = planInstance.GetComponent<Renderer>();
+        planMaterial = rend.material;  
+        planMaterial.SetFloat("_Mode", 2);
+        planMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        planMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        planMaterial.EnableKeyword("_ALPHABLEND_ON");
+        planMaterial.renderQueue = 3000;
+
+        // 4. 開始閃爍（假設你已有這個 Coroutine）
+        if (flickerCoroutine != null) StopCoroutine(flickerCoroutine);
+        flickerCoroutine = StartCoroutine(FlickerPlan());
+
+        // 5. 啟動持續更新 Coroutine
+        isPlanFixed = false;
+        if (updatePlanCoroutine != null) StopCoroutine(updatePlanCoroutine);
+        updatePlanCoroutine = StartCoroutine(UpdatePlan());
+    }
+
+    // -----------------------------
+    // Step2：不斷更新 Plan 的位置、方向、長度
+    // -----------------------------
+    private IEnumerator UpdatePlan()
+    {
+        int ignorePlanLayer = LayerMask.GetMask("Ignore Raycast");
+        int groundMask     = ~ignorePlanLayer;
+
+        const float extension = 15f;  // 往玩家後方延伸 50m
+
+        while (!isPlanFixed && planInstance != null)
+        {
+            // a. 水平向量
+            Vector3 raw = player.position - transform.position;
+            Vector3 flatDir = new Vector3(raw.x, 0f, raw.z).normalized;
+
+            // 原本的 NPC→玩家距離
+            float baseLength = raw.magnitude;
+            // 加上延伸距離
+            float fullLength = baseLength + extension;
+
+            // b. 重新計算中心點：往 flatDir 方向走一半的 fullLength
+            Vector3 center = transform.position + flatDir * (fullLength * 0.5f);
+
+            // c. 貼地
+            RaycastHit hit;
+            if (Physics.Raycast(center + Vector3.up * 5f, Vector3.down, out hit, 10f, groundMask))
+                center.y = hit.point.y + 0.01f;
+            else
+                center.y = transform.position.y;
+
+            // d. 更新 Transform
+            planInstance.transform.position = center;
+            if (flatDir.sqrMagnitude > 0.001f)
+                planInstance.transform.rotation = Quaternion.LookRotation(flatDir);
+            // Z 軸縮放用 fullLength/10f，X 軸（寬度）維持 planWidth
+            planInstance.transform.localScale = new Vector3(
+                planWidth,
+                1f,
+                fullLength / 10f
+            );
+
+            yield return null;
+        }
+    }
+
+
+
+    // -----------------------------
+    // Step3：呼叫這個來「固定」平面，並執行 ThrowStone
+    // -----------------------------
+    public void FreezePlanIndicatorAndThrow()
+    {
+        if (planInstance == null) return;
+
+        // 3. 呼叫丟石頭邏輯
+        ThrowStone();
+
+        // 1. 停掉持續更新
+        isPlanFixed = true;
+        if (updatePlanCoroutine != null)
+        {
+            StopCoroutine(updatePlanCoroutine);
+            updatePlanCoroutine = null;
+        }
+
+        // 2. （選擇）也可以停掉閃爍，讓 Plan 保持當前透明度
+        if (flickerCoroutine != null)
+        {
+            StopCoroutine(flickerCoroutine);
+            flickerCoroutine = null;
+        }
+
+        
+    }
+
+    // -----------------------------
+    // 閃爍協程：透明度在 min↔max 之間來回
+    // -----------------------------
+    private IEnumerator FlickerPlan()
+    {
+        Color c = planMaterial.color;
+        while (true)
+        {
+            // Sin 波動產生 0~1 之間的值，再對應到透明度範圍
+            float t = (Mathf.Sin(Time.time * flickerFrequency * Mathf.PI * 2f) + 1f) * 0.5f;
+            c.a = Mathf.Lerp(flickerMinAlpha, flickerMaxAlpha, t);
+            planMaterial.color = c;
+            yield return null;
+        }
+    }
+
+    // -----------------------------
+    // 公開：淡出並移除 Plan
+    // -----------------------------
+    public void HidePlanIndicator()
+    {
+        StartCoroutine(FadeOutPlanIndicator());
+    }
+
+    // -----------------------------
+    // 淡出協程：從當前透明度平滑降到 0，然後銷毀
+    // -----------------------------
+    private IEnumerator FadeOutPlanIndicator()
+    {
+        // 停止閃爍
+        if (flickerCoroutine != null)
+        {
+            StopCoroutine(flickerCoroutine);
+            flickerCoroutine = null;
+        }
+        if (planMaterial == null) yield break;
+
+        Color c = planMaterial.color;
+        float startAlpha = c.a;
+        float elapsed = 0f;
+
+        while (elapsed < fadeOutDuration)
+        {
+            elapsed += Time.deltaTime;
+            c.a = Mathf.Lerp(startAlpha, 0f, elapsed / fadeOutDuration);
+            planMaterial.color = c;
+            yield return null;
+        }
+
+        // 銷毀 GameObject
+        if (planInstance != null)
+        {
+            Destroy(planInstance);
+            planInstance = null;
+        }
+    }
 }
