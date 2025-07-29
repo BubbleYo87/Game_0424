@@ -97,6 +97,7 @@ public class Guy_2_Script : MonoBehaviour
     [Header("血量")]
     public int maxHP = 3;      // 最大血量
     private int currentHP;     // 當前血量
+    private bool isDead = false;    // ### 死亡旗標
 
     [Header("血條物件 (HP0~HP3)")]
     public GameObject[] hpBars;  // 血條顯示物件陣列，長度應為 maxHP+1
@@ -370,6 +371,12 @@ public class Guy_2_Script : MonoBehaviour
 
         if (currentHP <= 0)
         {
+            if (isDead) 
+            {
+                // 已經死了，就直接跳過不做任何事
+                return;
+            }
+            isDead = true;
             // 播放死亡動畫並延遲銷毀
             animator.SetTrigger("E_Guy_Die");
             agent.isStopped = true;

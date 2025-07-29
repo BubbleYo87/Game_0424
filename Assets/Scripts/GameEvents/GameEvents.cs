@@ -12,6 +12,7 @@ public static class GameEvents
     // 2. 觸發事件的方法
     public static void TriggerCameraShake(float duration, float magnitude)
         => OnCameraShake?.Invoke(duration, magnitude);
+    
 }
 
 

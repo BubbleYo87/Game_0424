@@ -17,7 +17,7 @@ public class PlayerAnimationController : MonoBehaviour
 
     // 🔫 武器模式：0 = 刀、1 = 槍
     private int weaponMode = 0;
-    private int comboStep;
+    public int comboStep;
     public float interval = 2f;
     private float timer;
 
@@ -247,8 +247,8 @@ public class PlayerAnimationController : MonoBehaviour
                 mag = 0.12f;
                 break;
             case 2:
-                dur = 0.12f;   // 第二段：中等
-                mag = 0.20f;
+                dur = 0.08f;   // 第一段：輕微
+                mag = 0.12f;
                 break;
             case 3:
                 dur = 0.18f;   // 第三段：最強

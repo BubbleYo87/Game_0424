@@ -108386,6 +108386,12 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 566317606}
   m_Mesh: {fileID: 8254687373856176130, guid: 38c88e570311a2141920c22be7f01df0, type: 3}
+--- !u!1 &566708159 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5939209739326796201, guid: f63f271d34151344796143d39ca6301b,
+    type: 3}
+  m_PrefabInstance: {fileID: 7519183159510161727}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &566920556
 GameObject:
   m_ObjectHideFlags: 0
@@ -287347,7 +287353,7 @@ MonoBehaviour:
     type: 3}
   m_PrefabInstance: {fileID: 7519183159510161727}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 566708159}
   m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: df968423f8d133a4eab357e4d9fedf59, type: 3}
@@ -287359,7 +287365,7 @@ MonoBehaviour:
     type: 3}
   m_PrefabInstance: {fileID: 7519183159510161727}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 566708159}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1ef2ed3db7f5bf8428720011ddc3139f, type: 3}
@@ -287371,6 +287377,30 @@ Rigidbody:
     type: 3}
   m_PrefabInstance: {fileID: 7519183159510161727}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1586727104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 566708159}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce660063ff8a51f449f86a92d749df49, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  comboController: {fileID: 1975110841}
+  playerCamera: {fileID: 316353103}
+  postProcessVolume: {fileID: 832575518}
+  dashDuration: 0.2
+  dashDistance: 3.5
+  collisionOffset: 2
+  disableCollisions: 0
+  dashCooldown: 0
+  heightOffset: 0.01
+  fovIncrease: 10
+  blurIntensity: 1
+  blurRecoverTime: 0.1
 --- !u!1 &1586905931
 GameObject:
   m_ObjectHideFlags: 0
@@ -340938,7 +340968,7 @@ PrefabInstance:
     - target: {fileID: 7331580169618228671, guid: 2f14eb2720eed124da9cebd7dd02b53e,
         type: 3}
       propertyPath: throwSpeed
-      value: 60
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 7331580169618228671, guid: 2f14eb2720eed124da9cebd7dd02b53e,
         type: 3}
@@ -341180,6 +341210,11 @@ PrefabInstance:
       propertyPath: knockbackSpeed
       value: 25
       objectReference: {fileID: 0}
+    - target: {fileID: 3419504013346721583, guid: f63f271d34151344796143d39ca6301b,
+        type: 3}
+      propertyPath: damageFlagDuration
+      value: 0.3
+      objectReference: {fileID: 0}
     - target: {fileID: 4168250045451606147, guid: f63f271d34151344796143d39ca6301b,
         type: 3}
       propertyPath: playerCam
@@ -341298,7 +341333,11 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5939209739326796201, guid: f63f271d34151344796143d39ca6301b,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1586727104}
   m_SourcePrefab: {fileID: 100100000, guid: f63f271d34151344796143d39ca6301b, type: 3}
 --- !u!1001 &8492789088705905890
 PrefabInstance:
