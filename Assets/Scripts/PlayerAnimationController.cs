@@ -10,7 +10,7 @@ public class PlayerAnimationController : MonoBehaviour
     public PlayerMovementGrappling playerMovement;
 
     private Rigidbody rb;
-    private bool wasGrapplingActive = false;
+    // private bool wasGrapplingActive = false;
     private bool hasGrappled = false;
     public bool isAttack = false;
     public Collider swordCollider;
@@ -129,7 +129,7 @@ public class PlayerAnimationController : MonoBehaviour
         }
 
         // ✅ WallRunning 動畫狀態同步
-        animator.SetBool("wallrunning", playerMovement.wallrunning);
+        // animator.SetBool("wallrunning", playerMovement.wallrunning);
 
 
         // ✅ 更新移動速度給 Blend Tree
@@ -138,9 +138,9 @@ public class PlayerAnimationController : MonoBehaviour
         animator.SetFloat("walk_speed", currentSpeed);
 
         // ✅ 勾鎖動畫狀態更新
-        bool currentGrapplingState = playerMovement.activeGrapple;
+        // bool currentGrapplingState = playerMovement.activeGrapple;
 
-        if (currentGrapplingState) hasGrappled = true;
+        // if (currentGrapplingState) hasGrappled = true;
 
         if (playerMovement.freeze)
         {
@@ -152,13 +152,13 @@ public class PlayerAnimationController : MonoBehaviour
             animator.SetBool("vine_bool", false);
         }
 
-        if (hasGrappled && wasGrapplingActive && !currentGrapplingState)
+        // if (hasGrappled && wasGrapplingActive && !currentGrapplingState)
         {
             animator.SetBool("vine_bool", false);
             hasGrappled = false;
         }
 
-        wasGrapplingActive = currentGrapplingState;
+        // wasGrapplingActive = currentGrapplingState;
 
         // ✅ 顯示子彈數量在 UI
         if (ammoText != null)

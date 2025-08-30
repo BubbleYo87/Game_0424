@@ -6,13 +6,7 @@ TagManager:
   tags:
   - CinemachineTarget
   - Ground
-  - Unta
-  - ceiling
-  - P_Bullet
-  - E_Bullet
-  - Enemy
   - EnemysDMG
-  - Enemys_DMG_Guy_Rock
   layers:
   - Default
   - TransparentFX
@@ -20,12 +14,12 @@ TagManager:
   - 
   - Water
   - UI
-  - Ground
+  - WhatIsGround
   - Player
-  - ceiling
-  - Wall
-  - HandUI
+  - WhatIsWall
   - Enemy
+  - Weapon
+  - Camera
   - 
   - 
   - 

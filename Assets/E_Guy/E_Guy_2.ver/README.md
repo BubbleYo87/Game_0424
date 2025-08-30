@@ -1,1 +1,0 @@
-Enemy_Guy_Ver.2 為E_Guy的遠程改良版本。
